@@ -1,4 +1,5 @@
 cmake_minimum_required (VERSION 2.8)
 project(server)
 aux_source_directory(. DIR_SRCS)
-add_executable(main ${DIR_SRCS}) 
+add_executable(GameServer ${DIR_SRCS}) 
+target_link_libraries(GameServer pthread)

@@ -12,6 +12,9 @@ using namespace std;
 
 int main(void)
 {
- 
+	TcpServerCom tcpServerCom;
+	tcpServerCom.initServerCom();
+	tcpServerCom.serverLoop();
+
     return 0;
 }

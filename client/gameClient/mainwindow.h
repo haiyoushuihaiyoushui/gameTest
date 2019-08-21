@@ -9,7 +9,14 @@ class MainWindow;
 }
 
 const QString SERVER_IP = "127.0.0.1";
-const qint32 SERVER_PORT = 8080;
+const qint32 SERVER_PORT = 56321;
+
+typedef enum
+{
+    FRAME_HEAD,
+    FRAME_COMMAND,
+    FRAME_DATA,
+}FRAME;
 
 class MainWindow : public QMainWindow
 {
@@ -24,10 +31,12 @@ private slots:
 
 private:
     void initTcpConnect();
+    void getId();
 
 private:
     Ui::MainWindow *ui;
     TcpClientCom *m_tcpClientCom;
+    QString m_id;
 };
 
 #endif // MAINWINDOW_H

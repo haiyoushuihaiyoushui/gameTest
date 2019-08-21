@@ -5,3 +5,5 @@ server/cmake_install.cmake
 server/.vscode
 build-gameClient-unknown-Debug
 *.o
+.~*
+server/GameServer
