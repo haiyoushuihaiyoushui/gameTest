@@ -13,7 +13,7 @@ TcpServerCom::TcpServerCom()
 	m_sockfd = -1;
 	m_clients.clear();
 	m_id.clear();
-	for (int i=0; i<strlen(ID_ARRAY); i++)
+	for (int i = 0; i < strlen(ID_ARRAY); i++)
 	{
 		m_id.push_back(ID_ARRAY[i]);
 	}
@@ -83,38 +83,96 @@ void TcpServerCom::serverLoop()
 			client_info.clientId = m_id.back();
 			m_id.pop_back();
 			client_info.clientFd = connectFd;
+			client_info.x = getRand();
+			client_info.y = getRand();
 			memcpy(&client_info.clientAddr, &client_addr, sizeof(struct sockaddr_in));
 			m_clients.push_back(client_info);
-			std::thread clientThread{[&] {clientProcess(client_info);}};
+			std::thread clientThread{[&] { clientProcess(client_info); }};
 			clientThread.detach();
 		}
 	}
+}
+
+int32_t TcpServerCom::getRand()
+{
+	srand((int32_t)time(0));
+	return (rand() % 100);
 }
 
 void TcpServerCom::analysisData(const CLIENT_INFO_S clientInfo, const uint8_t *recv_buf, const int32_t recv_len)
 {
 	uint8_t send_buf[BUFF_LEN] = "";
 	int32_t send_len = 0;
-	printf("%s %d %s %x %x\r\n", __FILE__, __LINE__, __FUNCTION__, recv_buf[0], recv_buf[1]);
+	std::vector<CLIENT_INFO_S>::iterator it;
+
 	send_buf[FRAME_HEAD] = 0xAB;
 	if (0xAB == recv_buf[FRAME_HEAD])
 	{
 		switch (recv_buf[FRAME_COMMAND])
 		{
-		case 0x01:
-			send_buf[FRAME_COMMAND] = 0x01;
-			send_buf[FRAME_DATA] = clientInfo.clientId;
-			send_len = FRAME_DATA + 1;
-			send(clientInfo.clientFd, send_buf, send_len, 0);
-			break;
-
-		case 0x02:
-			std::cout << std::string((char *)recv_buf, FRAME_COMMAND, recv_len) << std::endl;
+		case 0x03:
+			//遍历vector并发送位置
+			for (it = m_clients.begin(); it != m_clients.end(); it++)
+			{
+				if (it->clientFd != clientInfo.clientFd)
+				{
+					send(it->clientFd, recv_buf, recv_len, 0);
+				}
+			}
 			break;
 
 		default:
 			break;
 		}
+	}
+}
+
+void TcpServerCom::newConnectSend(const CLIENT_INFO_S clientInfo)
+{
+	FRAME_POSITION_S newSendFrame;
+	FRAME_POSITION_S oldSendFrame;
+	int32_t send_len = sizeof(FRAME_POSITION_S);
+	std::vector<CLIENT_INFO_S>::iterator it;
+
+	newSendFrame.head = 0xAB;
+	newSendFrame.command = 0x01;
+	newSendFrame.id = clientInfo.clientId;
+	newSendFrame.x = clientInfo.x;
+	newSendFrame.y = clientInfo.y;
+
+	oldSendFrame.head = 0xAB;
+	oldSendFrame.command = 0x01;
+
+	for (it = m_clients.begin(); it != m_clients.end(); it++)
+	{
+		//告知已存在的client有新client
+		send(it->clientFd, &newSendFrame, send_len, 0);
+	}
+	for (it = m_clients.begin(); it != m_clients.end(); it++)
+	{
+		//向新client发送已存在的client
+		if (it->clientFd != clientInfo.clientFd)
+		{
+			oldSendFrame.id = it->clientId;
+			oldSendFrame.x = it->x;
+			oldSendFrame.y = it->y;
+			send(clientInfo.clientFd, &oldSendFrame, send_len, 0);
+		}
+	}
+}
+void TcpServerCom::disConnectSend(const int32_t id)
+{
+	FRAME_POSITION_S sendFrame = {0};
+	int32_t send_len = sizeof(FRAME_POSITION_S);
+	std::vector<CLIENT_INFO_S>::iterator it;
+
+	sendFrame.head = 0xAB;
+	sendFrame.command = 0x02;
+	sendFrame.id = id;
+
+	for (it = m_clients.begin(); it != m_clients.end(); it++)
+	{
+		send(it->clientFd, &sendFrame, send_len, 0);
 	}
 }
 
@@ -131,14 +189,18 @@ void TcpServerCom::clientProcess(const CLIENT_INFO_S clientInfo)
 	pthread_setname_np(pthread_self(), pthread_name);
 	inet_ntop(AF_INET, &clientInfo.clientAddr.sin_addr, cli_ip, INET_ADDRSTRLEN);
 
-	std::cout << cli_ip << ":" << clientInfo.clientAddr.sin_port << " connect" << " " << clientInfo.clientId << std::endl;
+	std::cout << cli_ip << ":" << clientInfo.clientAddr.sin_port << " connect"
+			  << " " << clientInfo.clientId << std::endl;
+	newConnectSend(clientInfo);
 	while ((recv_len = recv(clientInfo.clientFd, recv_buf, sizeof(recv_buf), 0)) > 0)
 	{
 		std::cout << "recv " << clientInfo.clientFd << " " << recv_buf << " " << recv_len << std::endl;
 		analysisData(clientInfo, recv_buf, recv_len);
+		memset(recv_buf, 0, BUFF_LEN);
 	}
-
-	std::cout << cli_ip << ":" << clientInfo.clientAddr.sin_port << " disconnect" << " " << clientInfo.clientId << std::endl;
+	disConnectSend(clientInfo.clientId);
+	std::cout << cli_ip << ":" << clientInfo.clientAddr.sin_port << " disconnect"
+			  << " " << clientInfo.clientId << std::endl;
 
 	for (it = m_clients.begin(); it != m_clients.end(); it++)
 	{
