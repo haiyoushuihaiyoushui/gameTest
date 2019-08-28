@@ -1,0 +1,6 @@
+CMakeCache.txt
+CMakeFiles/
+GameServer
+Makefile
+nohup.out
+cmake_install.cmake
